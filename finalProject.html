@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+  <html>
+    <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+      <title>Geog 585 Final Project</title>
+	  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.2.0/leaflet.css" type="text/css" crossorigin="">
+	  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.2.0/leaflet.js" crossorigin=""></script>
+	  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.4.3/proj4.js"></script>
+	  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.1/proj4leaflet.min.js"></script>
+      
+	  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.4.3/proj4.js"></script>
+	  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.1/proj4leaflet.min.js"></script>
+
+	  <script src="https://d3js.org/d3.v4.js"></script>
+	  
+      <link rel="stylesheet" href="style.css" type="text/css">
+	  
+	  <div class = "container-fluid">
+		<h1 id="title">Potential Impacts of Proposed Linear Infrastructure in the Mekong Region</h1>
+		<h2 id="subtitle">Use the map below to examine the overlap of planned roads, rails, and power lines with core biodiversity areas.</h2>
+
+      <script src="infrastructureLocations.js"></script>
+	  <script src="mekong_70.js"></script>
+	  <script src="mekong_80.js"></script>
+	  <script src="mekong_90.js"></script>
+	
+
+       
+      <script type="text/javascript">
+	  // code block for map
+
+			// create map object
+			var map;
+
+			function init() {
+				// create map and set center and zoom level
+				map = new L.map('mapid');
+				map.setView([18.940881,101.331763],6);
+
+				// create and add the tile layer from PASS space
+				var basemap = L.tileLayer('http://personal.psu.edu/gcs5243/tiles/FinalProjectBasemap/{z}/{x}/{y}.png',
+					{opacity: .7  // decrease opacity so that overlay is easier to see
+					});
+				 
+				// add basemap to map
+				basemap.addTo(map)
+				
+				// create style for biodiversity layers
+				function biocoreStyle(feature) {
+					return {
+						fillColor: "#014421", //forest green
+						fillOpacity: .5,
+						color: "#014421",
+						weight: 2,
+					};
+				};
+				
+				// create biodiversity layers
+				var mekong70Layer = L.Proj.geoJson(mekong70cores, {
+					style: biocoreStyle
+				});
+				
+				var mekong80Layer = L.Proj.geoJson(mekong80cores, {
+					style: biocoreStyle
+				});
+				
+				var mekong90Layer = L.Proj.geoJson(mekong90cores, {
+					style: biocoreStyle
+				});
+				
+				// create layer groups for layer control
+				// code based on lesson 8: https://www.e-education.psu.edu/geog585/node/780
+				var basemap = {
+					"Protected Areas": basemap
+				}
+
+				var overlays = {
+					"Top 10 % Biodiversity": mekong90Layer,
+					"Top 20 % Biodiversity": mekong80Layer,
+					"Top 30 % Biodiversity": mekong70Layer,
+				};
+				
+				// make layer control expanded
+				var options = {
+					collapsed: false
+				}
+				
+				// Add layer control
+				L.control.layers(basemap, overlays, options).addTo(map);
+				
+				// set symbology for infrastructure layer and control for clicking
+				var infrastructureLayer;
+
+				var selection;
+				var selectedLayer;
+
+				// define the styles for the infrastructure layer (unselected and selected)
+				function infraStyle(feature) {
+					var lineColor;
+					var type = feature.properties.InfType;
+					
+					// set attribute color based on infrastructure type
+					if (type == "Road")
+						lineColor = "#D20021"; //red
+					else if (type == "Transmission Line")
+						lineColor = "#3E92D6"; //blue
+					else if (type == "Rail")
+						lineColor = "#F6C913"; //yellow
+					else
+						lineColor = "#000000";
+						
+				  return {
+					color: lineColor,
+					weight: 3
+					
+				  };
+				}
+		
+				function infraSelectedStyle(feature) {
+					var selectedLineColor;
+					var selectedType = feature.properties.InfType;
+					
+					// set attribute color based on infrastructure type when selected
+					if (selectedType == "Road")
+						selectedLineColor = "#A600FF"; //magenta/purple
+					else if (selectedType == "Transmission Line")
+						selectedLineColor = "#004C8B"; //dark blue
+					else if (selectedType == "Rail")
+						selectedLineColor = "#FF9A00"; //orange
+					else
+						selectedLineColor = "#000000";
+					
+					
+				  return {
+					color: selectedLineColor,
+					weight: 5
+				  };
+				}
+				
+				// handle click events on infrastructure features
+				function infraOnEachFeature(feature, layer){
+				  layer.on({
+					click: function(e) {
+					  if (selection) {            
+						resetStyles();
+					  }
+							  
+					  e.target.setStyle(infraSelectedStyle(feature));
+					  selection = e.target;
+					  selectedLayer = infrastructureLayer;
+
+					  // Insert some HTML with the feature name
+					  buildSummaryLabel(feature);
+
+					  L.DomEvent.stopPropagation(e); // stop click event from being propagated further
+					}
+				  });
+				}
+				
+				// add the infrastructure GeoJSON layer
+				var infrastructureLayer = new L.geoJSON(infrastructureData,{
+				  style: infraStyle,
+				  onEachFeature: infraOnEachFeature
+				});    
+				
+				//add infrastructure layer to map
+				infrastructureLayer.addTo(map);
+
+				// handle clicks on the map that didn't hit a feature - reset map
+				map.addEventListener('click', function(e) {
+				  if (selection) {
+					resetStyles();
+					selection = null;
+					document.getElementById('summaryLabel').innerHTML = '<p>Click a line to learn more about the proposed infrastructure project.</p>';
+				  }
+				});
+				
+				// function to set the old selected feature back to its original symbol. Used when the map or a feature is clicked.
+				function resetStyles(){
+				  selectedLayer.resetStyle(selection);
+				}
+				
+				// function to build the HTML for the summary label using the selected feature's properties
+				function buildSummaryLabel(currentFeature){
+				  var featureType = currentFeature.properties.InfType;
+				  var featureInitiative = currentFeature.properties.Initiative;
+				  var featureStatus = currentFeature.properties.Con_Status;
+				  var featureCategory = currentFeature.properties.New_Upgrad;
+				  if (featureCategory == "Improvement")
+					document.getElementById('summaryLabel').innerHTML = '<p style="font-size:18px; text-transform:uppercase; font-family:tahoma"><b> This ' + featureType + ' is ' + featureStatus + ' as part of the ' + featureInitiative + ' Initiative. It will be an upgrade of an existing ' + featureType + '.</b></p>';
+				  if (featureCategory == "New")
+					document.getElementById('summaryLabel').innerHTML = '<p style="font-size:18px; text-transform:uppercase; font-family:tahoma"><b> This ' + featureType + ' is ' + featureStatus + ' as part of the ' + featureInitiative + ' Initiative. It will be a new footprint.</b></p>';
+				  if (featureCategory == "Unclear")
+					document.getElementById('summaryLabel').innerHTML = '<p style="font-size:18px; text-transform:uppercase; font-family:tahoma"><b> This ' + featureType + ' is ' + featureStatus + ' as part of the ' + featureInitiative + ' Initiative. It is unclear if it will be an upgrade or a new footprint.</b></p>';
+				}
+				
+				//function to keep infrastructure layer on top when biodiversity layers are turned on
+				map.on("overlayadd", function (event) {
+					infrastructureLayer.bringToFront();
+				});
+			}
+		
+   </script>
+    </head>
+	
+    <body onload="init()">
+		<div id='container'>
+			<div id='left'>
+				<div id="mapid"></div>
+				<div id='attribution'>
+					<p> Data Attribution: Open Street Map, World Database on Protected Areas, ESRI, World Bank, USAID, Center for Large Landscape Conservation. </p>
+				</div>
+			</div>
+			
+			<div id='right'>
+				
+				<div id="summaryLabel">
+					<p>Click a line to learn more about the proposed infrastructure project.</p>
+				</div>
+				
+		
+				<div id="chartTitle">
+					<p>Length (km) of linear infrastructure passing through core biodiversity areas</p>
+				</div>
+				<div id="chart_area"></div>
+			</div>
+			
+			<ul class="legend">
+					<li><span class="roads"></span> Roads</li>
+					<li><span class="rails"></span> Rails</li>
+					<li><span class="powerlines"></span> Power Lines</li>
+				</ul>
+			<div class='clear'></div>
+		</div>
+		
+<script>
+
+	// Code for chart modified from: https://www.d3-graph-gallery.com/graph/barplot_grouped_basicWide.html 
+	// set the dimensions and margins of the graph
+	var margin = {top: 10, right: 30, bottom: 50, left: 80},
+		width = 460 - margin.left - margin.right,
+		height = 400 - margin.top - margin.bottom;
+
+	// append the svg object to the body of the page
+	var svg = d3.select("#chart_area")
+	  .append("svg")
+		.attr("width", width + margin.left + margin.right)
+		.attr("height", height + margin.top + margin.bottom)
+	  .append("g")
+		.attr("transform",
+			  "translate(" + margin.left + "," + margin.top + ")");
+
+	// Parse the Data
+	d3.csv("Final_Project_LI_Data.csv", function(data) {
+
+	  // List of subgroups = header of the csv files = soil condition here
+	  var subgroups = data.columns.slice(1)
+
+	  // List of groups = species here = value of the first column called group -> I show them on the X axis
+	  var groups = d3.map(data, function(d){return(d.Biodiversity)}).keys()
+
+	  // Add X axis
+	  var x = d3.scaleBand()
+		  .domain(groups)
+		  .range([0, width])
+		  .padding([0.2])
+	  svg.append("g")
+		.attr("transform", "translate(0," + height + ")")
+		.call(d3.axisBottom(x).tickSize(0));
+
+	  // Add Y axis
+	  var y = d3.scaleLinear()
+		.domain([0, 2000])
+		.range([ height, 0 ]);
+	  svg.append("g")
+		.call(d3.axisLeft(y));
+
+	  // Another scale for subgroup position?
+	  var xSubgroup = d3.scaleBand()
+		.domain(subgroups)
+		.range([0, x.bandwidth()])
+		.padding([0.05])
+
+	  // color palette = one color per subgroup
+	  var color = d3.scaleOrdinal()
+		.domain(subgroups)
+		.range(["#D20021", "#F6C913","#3E92D6"])
+
+	  // Show the bars
+	  svg.append("g")
+		.selectAll("g")
+		// Enter in data = loop group per group
+		.data(data)
+		.enter()
+		.append("g")
+		  .attr("transform", function(d) { return "translate(" + x(d.Biodiversity) + ",0)"; })
+		.selectAll("rect")
+		.data(function(d) { return subgroups.map(function(key) { return {key: key, value: d[key]}; }); })
+		.enter().append("rect")
+		  .attr("x", function(d) { return xSubgroup(d.key); })
+		  .attr("y", function(d) { return y(d.value); })
+		  .attr("width", xSubgroup.bandwidth())
+		  .attr("height", function(d) { return height - y(d.value); })
+		  .attr("fill", function(d) { return color(d.key); });
+
+	})
+	
+	// create axis labels and add to chart area
+	svg.append("text")
+		.attr("class", "x label")
+		.attr("text-anchor", "middle")
+		.attr("x", width/2)
+		.attr("y", height + 40)
+		.text("Top Biodiversity Areas");
+		
+	svg.append("text")
+		.attr("class", "y label")
+		.attr("text-anchor", "middle")
+		.attr("x", -150)
+		.attr("y", -60 )
+		.attr("transform", "rotate(-90)")
+		.text("Length of Overlap (km)");
+	
+
+</script>
+</body>
+</html>
